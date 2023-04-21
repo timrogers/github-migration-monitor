@@ -4,20 +4,23 @@
     "version": "0.0.0-development",
     "scripts": {
         "dev": "npx ts-node src/index.ts",
-        "build": "npx tsc"
+        "build": "npx tsc",
+        "prepublish": "npm run build",
+        "lint": "eslint . --ext .ts",
+        "lint-and-fix": "eslint . --ext .ts --fix",
+        "semantic-release": "semantic-release"
     },
     "module": "./dist/src/index.js",
     "homepage": "https://github.com/timrogers/github-migrator-monitor",
     "files": [
         "dist"
     ],
-    "bin": "./dist/index.js",
+    "bin": "./dist/src/index.js",
     "author": "Tim Rogers <timrogers@github.com>",
     "license": "MIT",
     "dependencies": {
         "@octokit/graphql": "^5.0.5",
         "@octokit/plugin-paginate-graphql": "^2.0.1",
-        "blessed": "^0.1.81",
         "commander": "^10.0.1",
         "lodash.groupby": "^4.6.0",
         "octokit": "^2.0.14",
@@ -31,7 +34,19 @@
         "@typescript-eslint/eslint-plugin": "^5.59.0",
         "@typescript-eslint/parser": "^5.59.0",
         "eslint": "^8.38.0",
+        "eslint-config-prettier": "^8.8.0",
+        "prettier": "^2.8.7",
+        "semantic-release": "^21.0.1",
         "ts-node": "^10.9.1",
         "typescript": "^5.0.4"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/timrogers/github-migrator-monitor.git"
+    },
+    "release": {
+        "branches": [
+            "main"
+        ]
     }
 }

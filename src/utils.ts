@@ -1,0 +1,1 @@
+export const presentState = (state: string): string => state.replace('_', ' ').toLowerCase();

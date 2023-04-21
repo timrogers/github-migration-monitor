@@ -1,11 +1,12 @@
 import { program } from 'commander';
 import { Octokit } from "@octokit/core";
 import { paginateGraphql } from "@octokit/plugin-paginate-graphql";
-import winston from 'winston';
-const { combine, timestamp, printf, colorize } = winston.format;
 import groupBy from 'lodash.groupby';
 
 import { description, name, version } from './../package.json';
+import logger from './logger';
+import { RepositoryMigration } from './types';
+import { presentState } from './utils';
 
 program
   .name(name)
@@ -14,21 +15,6 @@ program
   .option('--github-token <token>', 'A GitHub personal access token (PAT) with `read:org` scope. Required to be set using this option or the `GITHUB_TOKEN` environment variable.')
   .requiredOption('--organization <organization>', 'The GitHub organization to monitor')
   .option('--interval <interval>', 'Interval in seconds between refreshes', (value) => parseInt(value), 10);
-
-const customFormat = printf(({ level, message, timestamp }) => {
-  return `${timestamp} ${level}: ${message}`;
-});
-
-const logger = winston.createLogger({
-  format: combine(
-    colorize(),
-    timestamp(),
-    customFormat
-    ),
-    transports: [
-      new winston.transports.Console()
-    ] 
-  });
 
 program.parse();
 
@@ -44,14 +30,6 @@ if (!githubToken) {
 const OctokitWithPaginateGraphql = Octokit.plugin(paginateGraphql);
 
 const octokit = new OctokitWithPaginateGraphql({ auth: githubToken });
-
-interface RepositoryMigration {
-  id: string;
-  createdAt: string;
-  failureReason?: string;
-  repositoryName: string;
-  state: string;
-}
 
 const getRepositoryMigrations = async (organizationId: string): Promise<RepositoryMigration[]> => {
   const paginatedResponse = await octokit.graphql.paginate(
@@ -107,7 +85,7 @@ const logSuccessfulMigration = (migration: RepositoryMigration): void => { logge
 
     const countsByState = Object.fromEntries(
       Object
-        .entries(groupBy(currentRepositoryMigrations, (migration) => migration.state))
+        .entries(groupBy(currentRepositoryMigrations, (migration) => presentState(migration.state)))
         .map(([state, migrations]) => [state.toString().toLowerCase(), migrations.length])
     );
 
@@ -124,7 +102,7 @@ const logSuccessfulMigration = (migration: RepositoryMigration): void => { logge
           } else if (updatedMigration.state === 'SUCCEEDED') {
             logSuccessfulMigration(updatedMigration);
           } else {
-            logger.info(`↗️ Migration of ${existingMigration.repositoryName} (${updatedMigration.id}) changed state: ${existingMigration.state} ➡️ ${updatedMigration.state}`);
+            logger.info(`↗️  Migration of ${existingMigration.repositoryName} (${updatedMigration.id}) changed state: ${presentState(existingMigration.state)} ➡️  ${presentState(updatedMigration.state)}`);
           }
         }
       }
@@ -138,8 +116,10 @@ const logSuccessfulMigration = (migration: RepositoryMigration): void => { logge
           logFailedMigration(newMigration);
         } else if (newMigration.state === 'SUCCEEDED') {
           logSuccessfulMigration(newMigration);
+        } else if (newMigration.state === 'QUEUED') {
+          logger.info(`↗️  Migration of ${newMigration.repositoryName} (${newMigration.id}) was queued`);
         } else {
-          logger.info(`↗️ Migration of ${newMigration.repositoryName} (${newMigration.id}) was queued and is currently ${newMigration.state}`);
+          logger.info(`↗️  Migration of ${newMigration.repositoryName} (${newMigration.id}) was queued and is currently ${presentState(newMigration.state)}`);
         }
       }
     }
