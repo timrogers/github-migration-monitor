@@ -11,7 +11,7 @@
         "semantic-release": "semantic-release"
     },
     "module": "./dist/src/index.js",
-    "homepage": "https://github.com/timrogers/github-migrator-monitor",
+    "homepage": "https://github.com/timrogers/github-migration-monitor",
     "files": [
         "dist"
     ],
@@ -42,7 +42,7 @@
     },
     "repository": {
         "type": "git",
-        "url": "https://github.com/timrogers/github-migrator-monitor.git"
+        "url": "https://github.com/timrogers/github-migration-monitor.git"
     },
     "release": {
         "branches": [
