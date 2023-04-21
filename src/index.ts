@@ -16,7 +16,7 @@ program
   .version(version)
   .option('--github-token <token>', 'A GitHub personal access token (PAT) with `read:org` scope. Required to be set using this option or the `GITHUB_TOKEN` environment variable.')
   .requiredOption('--organization <organization>', 'The GitHub organization to monitor')
-  .option('--interval <interval>', 'Interval in seconds between refreshes', (value) => parseInt(value), 10);
+  .option('--interval-in-seconds <interval_in_seconds>', 'Interval in seconds between refreshes', (value) => parseInt(value), 10);
 
 program.parse();
 
@@ -128,7 +128,7 @@ const logSuccessfulMigration = (migration: RepositoryMigration): void => { logge
 
     repositoryMigrations = currentRepositoryMigrations;
 
-    setTimeout(() => updateRepositoryMigration(false), opts.interval * 1000);
+    setTimeout(() => updateRepositoryMigration(false), opts.intervalInSeconds * 1000);
   }    
 
   updateRepositoryMigration(true);
