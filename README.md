@@ -2,7 +2,7 @@
 
 This command line tool allows you to monitor an organization's [GitHub Enterprise Importer (GEI)](https://docs.github.com/en/migrations/using-github-enterprise-importer) migrations.
 
-It'll watch your organization's migrations and provide you updates as new migrations are queued and as they progress.
+It'll watch your organization's migrations and provide you updates as new migrations are queued and as they progress, including outputting warnings from successful migrations.
 
 ```
 2023-04-21T12:57:04.689Z info: 📊 Current stats: 3 succeeded, 1 failed
@@ -17,6 +17,7 @@ It'll watch your organization's migrations and provide you updates as new migrat
 2023-04-21T12:58:19.545Z info: 📊 Current stats: 3 succeeded, 1 failed, 1 in progress
 2023-04-21T12:58:30.191Z info: 📊 Current stats: 4 succeeded, 1 failed
 2023-04-21T12:58:30.191Z info: ✅ Migration of my-repo (RM_kgDaACQzY2Q5YjRjYi0xMmQ0LTRiYjQtYjBmZC0zZGIzYWM5M2Q2YzU) succeeded
+2023-04-21T12:58:31.191Z warn: ⚠️  Migration of my-repo(RM_kgDaACQzY2Q5YjRjYi0xMmQ0LTRiYjQtYjBmZC0zZGIzYWM5M2Q2YzU) returned a warning: Pull Request Review Thread Comment with url https://github.com/monalisa/my-repo/pull/277/files#r93784193 could not be transformed. Reason: Document::ValidationError - {:thread_id=>["can't be blank"]}
 ```
 
 ## Usage
