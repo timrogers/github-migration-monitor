@@ -4,6 +4,7 @@ import { program } from 'commander';
 import { Octokit } from "@octokit/core";
 import { paginateGraphql } from "@octokit/plugin-paginate-graphql";
 import groupBy from 'lodash.groupby';
+import fetch from 'cross-fetch';
 
 import { description, name, version } from './../package.json';
 import logger from './logger';
@@ -46,6 +47,7 @@ const getRepositoryMigrations = async (organizationId: string): Promise<Reposito
                 failureReason
                 repositoryName
                 state
+                migrationLogUrl
               }
               pageInfo {
                 hasNextPage
@@ -74,8 +76,56 @@ const getOrganizationId = async (organizationLogin: string): Promise<string> => 
   return response.organization.id;
 }
 
+const fetchMigrationLogUrl = async (migrationId: string): Promise<string | null> => {
+  const response = await octokit.graphql(`
+    query getMigrationLogUrl($migrationId: ID!) {
+      node(id: $migrationId) {
+        ... on Migration { migrationLogUrl }
+      }
+    }
+  `, {
+    migrationId
+  }) as { node: { migrationLogUrl: string | null }};
+
+  return response.node.migrationLogUrl;
+}
+
+const MAXIMUM_ATTEMPTS_TO_GET_MIGRATION_LOG = 5;
+
+async function getMigrationLogEntries(migrationId: string, currentAttempt = 1): Promise<string[]> {
+  const migrationLogUrl = await fetchMigrationLogUrl(migrationId);
+
+  if (migrationLogUrl) {
+    const migrationLogResponse = await fetch(migrationLogUrl);
+    
+    if (migrationLogResponse.ok) {
+      const migrationLog = await migrationLogResponse.text();
+      return migrationLog.split('\n');
+    } else {
+      throw `Unable to get migration log for migration ${migrationId}: ${migrationLogResponse.status} ${migrationLogResponse.statusText}`;
+    }
+  } else {
+    if (currentAttempt < MAXIMUM_ATTEMPTS_TO_GET_MIGRATION_LOG) {
+      return getMigrationLogEntries(migrationId, currentAttempt + 1);
+    } else {
+      throw `Unable to get migration log URL for migration ${migrationId} after ${MAXIMUM_ATTEMPTS_TO_GET_MIGRATION_LOG} attempt(s)`;
+    }
+  }
+}
+
 const logFailedMigration = (migration: RepositoryMigration): void => { logger.error(`🛑 Migration of ${migration.repositoryName} (${migration.id}) failed: ${migration.failureReason}`) };
 const logSuccessfulMigration = (migration: RepositoryMigration): void => { logger.info(`✅ Migration of ${migration.repositoryName} (${migration.id}) succeeded`) };
+
+const logMigrationWarnings = async (migration: RepositoryMigration): Promise<void> => {
+  const migrationLogEntries = await getMigrationLogEntries(migration.id);
+  
+  const migrationLogWarnings = migrationLogEntries.filter((entry) => entry.includes('WARN'));
+
+  for (const migrationLogWarning of migrationLogWarnings) {
+    const presentedWarning = migrationLogWarning.split(' -- ')[1];
+    logger.warn(`⚠️  Migration of ${migration.repositoryName} (${migration.id}) returned a warning: ${presentedWarning}`);
+  }
+}
 
 (async () => {
   let repositoryMigrations = [] as RepositoryMigration[];
@@ -103,6 +153,7 @@ const logSuccessfulMigration = (migration: RepositoryMigration): void => { logge
             logFailedMigration(updatedMigration);
           } else if (updatedMigration.state === 'SUCCEEDED') {
             logSuccessfulMigration(updatedMigration);
+            logMigrationWarnings(updatedMigration);
           } else {
             logger.info(`↗️  Migration of ${existingMigration.repositoryName} (${updatedMigration.id}) changed state: ${presentState(existingMigration.state)} ➡️  ${presentState(updatedMigration.state)}`);
           }
@@ -118,6 +169,7 @@ const logSuccessfulMigration = (migration: RepositoryMigration): void => { logge
           logFailedMigration(newMigration);
         } else if (newMigration.state === 'SUCCEEDED') {
           logSuccessfulMigration(newMigration);
+          logMigrationWarnings(newMigration);
         } else if (newMigration.state === 'QUEUED') {
           logger.info(`↗️  Migration of ${newMigration.repositoryName} (${newMigration.id}) was queued`);
         } else {
