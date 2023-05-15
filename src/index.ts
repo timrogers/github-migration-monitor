@@ -9,7 +9,7 @@ import fetch from 'cross-fetch';
 import { description, name, version } from './../package.json';
 import logger from './logger';
 import { RepositoryMigration } from './types';
-import { presentState } from './utils';
+import { presentState, serializeError } from './utils';
 
 program
   .name(name)
@@ -29,6 +29,8 @@ if (!githubToken) {
   logger.error('GitHub token is required. Please set it using the `--github-token` option or the `GITHUB_TOKEN` environment variable.');
   process.exit(1);
 }
+
+const intervalInMilliseconds = opts.intervalInSeconds * 1_000;
 
 const OctokitWithPaginateGraphql = Octokit.plugin(paginateGraphql);
 
@@ -93,22 +95,28 @@ const fetchMigrationLogUrl = async (migrationId: string): Promise<string | null>
 const MAXIMUM_ATTEMPTS_TO_GET_MIGRATION_LOG = 5;
 
 async function getMigrationLogEntries(migrationId: string, currentAttempt = 1): Promise<string[]> {
-  const migrationLogUrl = await fetchMigrationLogUrl(migrationId);
+  try {
+    const migrationLogUrl = await fetchMigrationLogUrl(migrationId);
 
-  if (migrationLogUrl) {
-    const migrationLogResponse = await fetch(migrationLogUrl);
-    
-    if (migrationLogResponse.ok) {
-      const migrationLog = await migrationLogResponse.text();
-      return migrationLog.split('\n');
+    if (migrationLogUrl) {
+      const migrationLogResponse = await fetch(migrationLogUrl);
+
+      if (migrationLogResponse.ok) {
+        const migrationLog = await migrationLogResponse.text();
+        return migrationLog.split('\n');
+      } else {
+        throw `Migration log URL found but fetching it returned ${migrationLogResponse.status} ${migrationLogResponse.statusText}`;
+      }
     } else {
-      throw `Unable to get migration log for migration ${migrationId}: ${migrationLogResponse.status} ${migrationLogResponse.statusText}`;
+      throw 'Migration found but migration log URL not yet available';
     }
-  } else {
+  } catch (e) {
     if (currentAttempt < MAXIMUM_ATTEMPTS_TO_GET_MIGRATION_LOG) {
+      logger.info(`Unable to download migration log for migration ${migrationId} after ${currentAttempt} attempts (${serializeError(e)}), trying again...`)
       return getMigrationLogEntries(migrationId, currentAttempt + 1);
     } else {
-      throw `Unable to get migration log URL for migration ${migrationId} after ${MAXIMUM_ATTEMPTS_TO_GET_MIGRATION_LOG} attempt(s)`;
+     logger.error(`Failed to download migration log for migration ${migrationId} after ${MAXIMUM_ATTEMPTS_TO_GET_MIGRATION_LOG} attempt(s): ${serializeError(e)}`);
+     return [];
     }
   }
 }
@@ -132,8 +140,15 @@ const logMigrationWarnings = async (migration: RepositoryMigration): Promise<voi
 
   const organizationId = await getOrganizationId(opts.organization);
 
-  async function updateRepositoryMigration(isFirstRun: boolean) {
-    const currentRepositoryMigrations = await getRepositoryMigrations(organizationId);
+  async function updateRepositoryMigration(isFirstRun: boolean): Promise<void> {
+    let currentRepositoryMigrations: RepositoryMigration[] = [];
+
+    try {
+      currentRepositoryMigrations = await getRepositoryMigrations(organizationId);
+    } catch (e) {
+      logger.error(`Failed to load migrations: ${serializeError(e)}. Trying again in ${opts.intervalInSeconds} second(s)`);
+      setTimeout(() => updateRepositoryMigration(isFirstRun), intervalInMilliseconds);
+    }
 
     const countsByState = Object.fromEntries(
       Object
@@ -180,7 +195,7 @@ const logMigrationWarnings = async (migration: RepositoryMigration): Promise<voi
 
     repositoryMigrations = currentRepositoryMigrations;
 
-    setTimeout(() => updateRepositoryMigration(false), opts.intervalInSeconds * 1000);
+    setTimeout(() => updateRepositoryMigration(false), intervalInMilliseconds);
   }    
 
   updateRepositoryMigration(true);
