@@ -5,38 +5,51 @@ import { Octokit } from "@octokit/core";
 import { paginateGraphql } from "@octokit/plugin-paginate-graphql";
 import groupBy from 'lodash.groupby';
 import fetch from 'cross-fetch';
+import blessed from 'blessed';
+import contrib from 'blessed-contrib';
+import TimeAgo from 'javascript-time-ago'
+import en from 'javascript-time-ago/locale/en'
+
+TimeAgo.addDefaultLocale(en);
+const timeAgo = new TimeAgo('en');
 
 import { description, name, version } from './../package.json';
 import logger from './logger';
-import { RepositoryMigration } from './types';
+import { MigrationState, Opts, RepositoryMigration } from './types';
 import { presentState, serializeError } from './utils';
 
 program
   .name(name)
   .description(description)
   .version(version)
-  .option('--github-token <token>', 'A GitHub personal access token (PAT) with `read:org` scope. Required to be set using this option or the `GITHUB_TOKEN` environment variable.')
+  .option('--github-token <token>', 'A GitHub personal access token (PAT) with `read:org` scope. Required to be set using this option or the `GITHUB_TOKEN` environment variable.', process.env.GITHUB_TOKEN)
   .requiredOption('--organization <organization>', 'The GitHub organization to monitor')
-  .option('--interval-in-seconds <interval_in_seconds>', 'Interval in seconds between refreshes', (value) => parseInt(value), 10);
+  .option('--interval-in-seconds <interval-in-seconds>', 'Interval in seconds between refreshes', (value) => parseInt(value), 10);
 
 program.parse();
 
-const opts = program.opts();
+const opts: Opts = program.opts();
 
-const githubToken = opts.githubToken || process.env.GITHUB_TOKEN;
+const {
+  githubToken,
+  organization,
+  intervalInSeconds
+} = opts;
 
 if (!githubToken) {
   logger.error('GitHub token is required. Please set it using the `--github-token` option or the `GITHUB_TOKEN` environment variable.');
   process.exit(1);
 }
 
-const intervalInMilliseconds = opts.intervalInSeconds * 1_000;
+const intervalInMilliseconds = intervalInSeconds * 1_000;
 
 const OctokitWithPaginateGraphql = Octokit.plugin(paginateGraphql);
 
 const octokit = new OctokitWithPaginateGraphql({ auth: githubToken });
 
 const getRepositoryMigrations = async (organizationId: string): Promise<RepositoryMigration[]> => {
+  // `@octokit/plugin-paginate-graphql` doesn't support GraphQL variables yet, so we have to use string interpolation
+  // to add the ID to the query
   const paginatedResponse = await octokit.graphql.paginate(
     `
       query paginateRepositoryMigrations($cursor: String) {
@@ -94,7 +107,7 @@ const fetchMigrationLogUrl = async (migrationId: string): Promise<string | null>
 
 const MAXIMUM_ATTEMPTS_TO_GET_MIGRATION_LOG = 5;
 
-async function getMigrationLogEntries(migrationId: string, currentAttempt = 1): Promise<string[]> {
+const getMigrationLogEntries = async (migrationId: string, currentAttempt = 1): Promise<string[]> => {
   try {
     const migrationLogUrl = await fetchMigrationLogUrl(migrationId);
 
@@ -121,8 +134,7 @@ async function getMigrationLogEntries(migrationId: string, currentAttempt = 1): 
   }
 }
 
-const logFailedMigration = (migration: RepositoryMigration): void => { logger.error(`🛑 Migration of ${migration.repositoryName} (${migration.id}) failed: ${migration.failureReason}`) };
-const logSuccessfulMigration = (migration: RepositoryMigration): void => { logger.info(`✅ Migration of ${migration.repositoryName} (${migration.id}) succeeded`) };
+
 
 const logMigrationWarnings = async (migration: RepositoryMigration): Promise<void> => {
   const migrationLogEntries = await getMigrationLogEntries(migration.id);
@@ -135,68 +147,178 @@ const logMigrationWarnings = async (migration: RepositoryMigration): Promise<voi
   }
 }
 
-(async () => {
-  let repositoryMigrations = [] as RepositoryMigration[];
+const screen = blessed.screen();
 
-  const organizationId = await getOrganizationId(opts.organization);
+const grid = new contrib.grid({ rows: 12, cols: 12, screen: screen });
+
+const queuedTable = grid.set(0, 0, 7, 4, contrib.table, { label: 'Queued', keys: true, fg: 'white', selectedFg: 'white', selectedBg: 'blue', interactive: true, border: { type: 'line', fg: 'cyan' }, columnSpacing: 10, columnWidth: [50, 20] }) as contrib.Widgets.TableElement;
+
+const inProgressTable = grid.set(0, 4, 7, 4, contrib.table, { label: 'In Progress', keys: true, fg: 'white', selectedFg: 'white', selectedBg: 'blue', interactive: true, border: { type: 'line', fg: 'yellow' }, columnSpacing: 10, columnWidth: [50, 20] }) as contrib.Widgets.TableElement;
+
+const succeededTable = grid.set(0, 8, 7, 4, contrib.table, { label: 'Succeeded', keys: true, fg: 'white', selectedFg: 'white', selectedBg: 'blue', interactive: true, border: { type: 'line', fg: 'green' }, columnSpacing: 10, columnWidth: [50, 20] }) as contrib.Widgets.TableElement;
+
+const failedTable = grid.set(7, 0, 3, 12, contrib.table, { label: 'Failed', keys: false, fg: 'white', border: { type: 'line', bg: 'red' }, columnSpacing: 10, columnWidth: [50, 20, 100] }) as contrib.Widgets.TableElement;
+
+const eventLog = grid.set(10, 0, 2, 12, contrib.log, { fg: 'green', selectedFg: 'green', label: 'Event Log' }) as contrib.Widgets.LogElement;
+
+const UI_ELEMENTS: blessed.Widgets.BoxElement[] = [queuedTable, inProgressTable, succeededTable, failedTable, eventLog];
+
+screen.key(['escape', 'q', 'C-c'], () => {
+  process.exit(0); 
+});
+
+// Fixes https://github.com/yaronn/blessed-contrib/issues/10
+screen.on('resize', function () {
+  for (const element of UI_ELEMENTS) {
+    element.emit('attach');
+  }
+});
+
+const logError = (message: string) => eventLog.log(`[ERROR] ${message}`);
+const logInfo = (message: string) => eventLog.log(`[INFO] ${message}`);
+
+const logFailedMigration = (migration: RepositoryMigration): void => { logError(`Migration of ${migration.repositoryName} (${migration.id}) failed: ${migration.failureReason}`) };
+const logSuccessfulMigration = (migration: RepositoryMigration): void => { logInfo(`Migration of ${migration.repositoryName} (${migration.id}) succeeded`) };
+
+const repositoryMigrationToTableEntry = (repositoryMigration: RepositoryMigration, startedAt: Date | undefined): string[] => {
+  const duration = startedAt ? `started ${timeAgo.format(startedAt)}` : `queued ${timeAgo.format(new Date(repositoryMigration.createdAt))}`;
+  return [repositoryMigration.repositoryName, duration];
+};
+
+const failedRepositoryMigrationToTableEntry = (repositoryMigration: RepositoryMigration, startedAt: Date | undefined): string[] => repositoryMigrationToTableEntry(repositoryMigration, startedAt).concat(repositoryMigration.failureReason || '');
+
+const TABLE_COLUMNS = ['Repository', 'Duration'];
+
+const updateScreen = (repositoryMigrations: RepositoryMigration[], repositoryMigrationsStartedAt: Map<string, Date>): void => {
+  const migrationsByState = groupBy(repositoryMigrations, (migration) => migration.state);
+  
+  const queuedMigrations = migrationsByState[MigrationState.QUEUED] || [];
+  const notStartedMigrations = migrationsByState[MigrationState.NOT_STARTED] || [];
+  const pendingValidationMigrations = migrationsByState[MigrationState.PENDING_VALIDATION] || [];
+
+  const failedMigrations = migrationsByState[MigrationState.FAILED] || [];
+  const failedValidationMigrations = migrationsByState[MigrationState.FAILED_VALIDATION] || [];
+
+  const queuedMigrationsForTable = queuedMigrations.concat(notStartedMigrations).concat(pendingValidationMigrations);
+  const inProgressMigrationsForTable = migrationsByState[MigrationState.IN_PROGRESS] || [];
+  const succeededMigrationsForTable = migrationsByState[MigrationState.SUCCEEDED] || [];
+  const failedMigrationsForTable = failedMigrations.concat(failedValidationMigrations);
+
+  queuedTable.setData({
+    headers: TABLE_COLUMNS,
+    data: queuedMigrationsForTable.map(migration => repositoryMigrationToTableEntry(migration, repositoryMigrationsStartedAt.get(migration.id)))
+  });
+
+  inProgressTable.setData({
+    headers: TABLE_COLUMNS,
+    data: inProgressMigrationsForTable.map(migration => repositoryMigrationToTableEntry(migration, repositoryMigrationsStartedAt.get(migration.id)))
+  });
+
+  succeededTable.setData({
+    headers: TABLE_COLUMNS,
+    data: succeededMigrationsForTable.map(migration => repositoryMigrationToTableEntry(migration, repositoryMigrationsStartedAt.get(migration.id)))
+  });
+
+  failedTable.setData({
+    headers: ['Destination', 'Duration', 'Error'],
+    data: failedMigrationsForTable.map(migration => failedRepositoryMigrationToTableEntry(migration, repositoryMigrationsStartedAt.get(migration.id)))
+  });
+
+  screen.render();
+};
+
+const isMigrationStarted = (migration: RepositoryMigration): boolean => migration.state !== MigrationState.NOT_STARTED && migration.state !== MigrationState.QUEUED;
+
+(async () => {
+  let repositoryMigrationsState = [] as RepositoryMigration[];
+
+  // The GitHub API doesn't return when a migration started - only when it was queued (`createdAt`).
+  // We use this map to keep track of when a migration started so we can show how long it's been running.
+  const repositoryMigrationStartedAt = new Map<string, Date>();
+
+  const organizationId = await getOrganizationId(organization);
 
   async function updateRepositoryMigration(isFirstRun: boolean): Promise<void> {
-    let currentRepositoryMigrations: RepositoryMigration[] = [];
+    let latestRepositoryMigrations: RepositoryMigration[] = [];
 
     try {
-      currentRepositoryMigrations = await getRepositoryMigrations(organizationId);
+      latestRepositoryMigrations = await getRepositoryMigrations(organizationId);
     } catch (e) {
-      logger.error(`Failed to load migrations: ${serializeError(e)}. Trying again in ${opts.intervalInSeconds} second(s)`);
+      logError(`Failed to load migrations: ${serializeError(e)}. Trying again in ${opts.intervalInSeconds} second(s)`);
+      // If we failed to fetch the migrations and it's currently the first run, we still pretend it's the first run next time
       setTimeout(() => updateRepositoryMigration(isFirstRun), intervalInMilliseconds);
+      return;
     }
 
     const countsByState = Object.fromEntries(
       Object
-        .entries(groupBy(currentRepositoryMigrations, (migration) => presentState(migration.state)))
+        .entries(groupBy(latestRepositoryMigrations, (migration) => presentState(migration.state)))
         .map(([state, migrations]) => [state.toString().toLowerCase(), migrations.length])
     );
 
     const countsAsString = Object.entries(countsByState).map(([state, count]) => `${count} ${state}`).join(', ');
-    logger.info(`📊 Current stats: ${countsAsString}`);
+    logInfo(`Current stats: ${countsAsString}`);
 
-    for (const existingMigration of repositoryMigrations) {
-      const updatedMigration = currentRepositoryMigrations.find((currentMigration) => currentMigration.id === existingMigration.id);
+    if (!isFirstRun) {
+      // Log for any state changes
+      for (const alreadyKnownMigration of repositoryMigrationsState) {
+        const latestVersionOfAlreadyKnownMigration = latestRepositoryMigrations.find((migration) => migration.id === alreadyKnownMigration.id);
 
-      if (updatedMigration) {
-        if (updatedMigration.state !== existingMigration.state) {
-          if (updatedMigration.state === 'FAILED') {
-            logFailedMigration(updatedMigration);
-          } else if (updatedMigration.state === 'SUCCEEDED') {
-            logSuccessfulMigration(updatedMigration);
-            logMigrationWarnings(updatedMigration);
-          } else {
-            logger.info(`↗️  Migration of ${existingMigration.repositoryName} (${updatedMigration.id}) changed state: ${presentState(existingMigration.state)} ➡️  ${presentState(updatedMigration.state)}`);
+        // If we've seen this migration before, and it's recorded in our state...
+        if (latestVersionOfAlreadyKnownMigration) {
+          const stateChanged = latestVersionOfAlreadyKnownMigration.state !== alreadyKnownMigration.state;
+
+          // Record (roughly) when the migration started if it has started since our last check
+          if (stateChanged && !repositoryMigrationStartedAt.has(latestVersionOfAlreadyKnownMigration.id) && isMigrationStarted(latestVersionOfAlreadyKnownMigration)) {
+            repositoryMigrationStartedAt.set(latestVersionOfAlreadyKnownMigration.id, new Date());
+          }
+
+          // Log state changes to the log
+          if (latestVersionOfAlreadyKnownMigration.state !== alreadyKnownMigration.state) {
+            if (latestVersionOfAlreadyKnownMigration.state === 'FAILED') {
+              logFailedMigration(latestVersionOfAlreadyKnownMigration);
+            } else if (latestVersionOfAlreadyKnownMigration.state === 'SUCCEEDED') {
+              logSuccessfulMigration(latestVersionOfAlreadyKnownMigration);
+              logMigrationWarnings(latestVersionOfAlreadyKnownMigration);
+            } else {
+              logInfo(`Migration of ${alreadyKnownMigration.repositoryName} (${latestVersionOfAlreadyKnownMigration.id}) changed state: ${presentState(alreadyKnownMigration.state)} ➡️  ${presentState(latestVersionOfAlreadyKnownMigration.state)}`);
+            }
           }
         }
       }
-    }
 
-    if (!isFirstRun) {
-      const newMigrations = currentRepositoryMigrations.filter((currentMigration) => !repositoryMigrations.find((existingMigration) => existingMigration.id === currentMigration.id));
+      // Log for new migrations
+      const newMigrations = latestRepositoryMigrations.filter((currentMigration) => !repositoryMigrationsState.find((existingMigration) => existingMigration.id === currentMigration.id));
 
       for (const newMigration of newMigrations) {
+        // Record (roughly) when the migration started because it is new and has started
+        if (!repositoryMigrationStartedAt.has(newMigration.id) && isMigrationStarted(newMigration)) {
+          repositoryMigrationStartedAt.set(newMigration.id, new Date());
+        }
+
         if (newMigration.state === 'FAILED') {
           logFailedMigration(newMigration);
         } else if (newMigration.state === 'SUCCEEDED') {
           logSuccessfulMigration(newMigration);
           logMigrationWarnings(newMigration);
         } else if (newMigration.state === 'QUEUED') {
-          logger.info(`↗️  Migration of ${newMigration.repositoryName} (${newMigration.id}) was queued`);
+          logger.info(`Migration of ${newMigration.repositoryName} (${newMigration.id}) was queued`);
         } else {
-          logger.info(`↗️  Migration of ${newMigration.repositoryName} (${newMigration.id}) was queued and is currently ${presentState(newMigration.state)}`);
+          logger.info(`Migration of ${newMigration.repositoryName} (${newMigration.id}) was queued and is currently ${presentState(newMigration.state)}`);
         }
       }
     }
 
-    repositoryMigrations = currentRepositoryMigrations;
+    // Update the state and render the UI
+    repositoryMigrationsState = latestRepositoryMigrations;
+    updateScreen(repositoryMigrationsState, repositoryMigrationStartedAt);
 
+    /// Start all over again - but it definitely isn't the first run this time
     setTimeout(() => updateRepositoryMigration(false), intervalInMilliseconds);
-  }    
-
+  } 
+  
+  // Start the first run, grabbing data and rendering the UI
   updateRepositoryMigration(true);
 })();
+
+screen.render();
