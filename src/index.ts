@@ -16,7 +16,7 @@ const timeAgo = new TimeAgo('en');
 import { description, name, version } from './../package.json';
 import logger from './logger';
 import { MigrationState, Opts, RepositoryMigration } from './types';
-import { presentState, serializeError } from './utils';
+import { parseSince, presentState, serializeError } from './utils';
 
 program
   .name(name)
@@ -24,7 +24,8 @@ program
   .version(version)
   .option('--github-token <token>', 'A GitHub personal access token (PAT) with `read:org` scope. Required to be set using this option or the `GITHUB_TOKEN` environment variable.', process.env.GITHUB_TOKEN)
   .requiredOption('--organization <organization>', 'The GitHub organization to monitor')
-  .option('--interval-in-seconds <interval-in-seconds>', 'Interval in seconds between refreshes', (value) => parseInt(value), 10);
+  .option('--interval-in-seconds <interval-in-seconds>', 'Interval in seconds between refreshes', (value) => parseInt(value), 10)
+  .option('--since <since>', 'Only show migrations created after this date and/or time. If this argument isn\'t set, migrations from the last 7 days will be shown. Supports ISO 8601 dates (e.g. `2023-05-18`) - which are interpreted as 00:00:00 in your machine\'s local time - and ISO 8601 timestamps.');
 
 program.parse();
 
@@ -32,13 +33,24 @@ const opts: Opts = program.opts();
 
 const {
   githubToken,
+  intervalInSeconds,
   organization,
-  intervalInSeconds
 } = opts;
 
 if (!githubToken) {
   logger.error('GitHub token is required. Please set it using the `--github-token` option or the `GITHUB_TOKEN` environment variable.');
   process.exit(1);
+}
+
+let since: Date | undefined = undefined;
+
+if (opts.since) {
+  try {
+    since = parseSince(opts.since);
+  } catch (e) {
+    logger.error(e);
+    process.exit(1);
+  }
 }
 
 const intervalInMilliseconds = intervalInSeconds * 1_000;
@@ -47,7 +59,7 @@ const OctokitWithPaginateGraphql = Octokit.plugin(paginateGraphql);
 
 const octokit = new OctokitWithPaginateGraphql({ auth: githubToken });
 
-const getRepositoryMigrations = async (organizationId: string): Promise<RepositoryMigration[]> => {
+const getRepositoryMigrations = async (organizationId: string, since: Date | undefined): Promise<RepositoryMigration[]> => {
   // `@octokit/plugin-paginate-graphql` doesn't support GraphQL variables yet, so we have to use string interpolation
   // to add the ID to the query
   const paginatedResponse = await octokit.graphql.paginate(
@@ -74,7 +86,13 @@ const getRepositoryMigrations = async (organizationId: string): Promise<Reposito
       }  `
   );
 
-  return paginatedResponse.node.repositoryMigrations.nodes as RepositoryMigration[];
+  const repositoryMigrations = paginatedResponse.node.repositoryMigrations.nodes as RepositoryMigration[];
+
+  if (since) {
+    return repositoryMigrations.filter(migration => new Date(migration.createdAt) >= since);
+  } else {
+    return repositoryMigrations;
+  }
 };
 
 const getOrganizationId = async (organizationLogin: string): Promise<string> => {
@@ -133,8 +151,6 @@ const getMigrationLogEntries = async (migrationId: string, currentAttempt = 1): 
     }
   }
 }
-
-
 
 const logMigrationWarnings = async (migration: RepositoryMigration): Promise<void> => {
   const migrationLogEntries = await getMigrationLogEntries(migration.id);
@@ -229,6 +245,14 @@ const updateScreen = (repositoryMigrations: RepositoryMigration[], repositoryMig
 
 const isMigrationStarted = (migration: RepositoryMigration): boolean => migration.state !== MigrationState.NOT_STARTED && migration.state !== MigrationState.QUEUED;
 
+const getNoMigrationsFoundMessage = (since: Date | undefined): string => {
+  if (since) {
+    return 'No migrations found since ' + since.toISOString();
+  } else {
+    return 'No migrations found';
+  }
+} 
+
 (async () => {
   let repositoryMigrationsState = [] as RepositoryMigration[];
 
@@ -242,7 +266,7 @@ const isMigrationStarted = (migration: RepositoryMigration): boolean => migratio
     let latestRepositoryMigrations: RepositoryMigration[] = [];
 
     try {
-      latestRepositoryMigrations = await getRepositoryMigrations(organizationId);
+      latestRepositoryMigrations = await getRepositoryMigrations(organizationId, since);
     } catch (e) {
       logError(`Failed to load migrations: ${serializeError(e)}. Trying again in ${opts.intervalInSeconds} second(s)`);
       // If we failed to fetch the migrations and it's currently the first run, we still pretend it's the first run next time
@@ -257,7 +281,7 @@ const isMigrationStarted = (migration: RepositoryMigration): boolean => migratio
     );
 
     const countsAsString = Object.entries(countsByState).map(([state, count]) => `${count} ${state}`).join(', ');
-    logInfo(`Current stats: ${countsAsString}`);
+    logInfo(`Current stats: ${countsAsString || getNoMigrationsFoundMessage(since)}`);
 
     if (!isFirstRun) {
       // Log for any state changes
