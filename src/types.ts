@@ -2,6 +2,7 @@ export interface Opts {
   githubToken?: string;
   organization: string;
   intervalInSeconds: number;
+  since?: string;
 }
 
 export interface RepositoryMigration {
