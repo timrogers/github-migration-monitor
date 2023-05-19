@@ -143,10 +143,10 @@ const getMigrationLogEntries = async (migrationId: string, currentAttempt = 1): 
     }
   } catch (e) {
     if (currentAttempt < MAXIMUM_ATTEMPTS_TO_GET_MIGRATION_LOG) {
-      logger.info(`Unable to download migration log for migration ${migrationId} after ${currentAttempt} attempts (${serializeError(e)}), trying again...`)
+      logWarn(`Unable to download migration log for migration ${migrationId} after ${currentAttempt} attempts (${serializeError(e)}), trying again...`)
       return getMigrationLogEntries(migrationId, currentAttempt + 1);
     } else {
-     logger.error(`Failed to download migration log for migration ${migrationId} after ${MAXIMUM_ATTEMPTS_TO_GET_MIGRATION_LOG} attempt(s): ${serializeError(e)}`);
+     logError(`Failed to download migration log for migration ${migrationId} after ${MAXIMUM_ATTEMPTS_TO_GET_MIGRATION_LOG} attempt(s): ${serializeError(e)}`);
      return [];
     }
   }
@@ -192,6 +192,7 @@ screen.on('resize', function () {
 
 const logError = (message: string) => eventLog.log(`[ERROR] ${message}`);
 const logInfo = (message: string) => eventLog.log(`[INFO] ${message}`);
+const logWarn = (message: string) => eventLog.log(`[WARN] ${message}`);
 
 const logFailedMigration = (migration: RepositoryMigration): void => { logError(`Migration of ${migration.repositoryName} (${migration.id}) failed: ${migration.failureReason}`) };
 const logSuccessfulMigration = (migration: RepositoryMigration): void => { logInfo(`Migration of ${migration.repositoryName} (${migration.id}) succeeded`) };
@@ -326,9 +327,9 @@ const getNoMigrationsFoundMessage = (since: Date | undefined): string => {
           logSuccessfulMigration(newMigration);
           logMigrationWarnings(newMigration);
         } else if (newMigration.state === 'QUEUED') {
-          logger.info(`Migration of ${newMigration.repositoryName} (${newMigration.id}) was queued`);
+          logInfo(`Migration of ${newMigration.repositoryName} (${newMigration.id}) was queued`);
         } else {
-          logger.info(`Migration of ${newMigration.repositoryName} (${newMigration.id}) was queued and is currently ${presentState(newMigration.state)}`);
+          logInfo(`Migration of ${newMigration.repositoryName} (${newMigration.id}) was queued and is currently ${presentState(newMigration.state)}`);
         }
       }
     }
