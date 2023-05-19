@@ -167,13 +167,15 @@ const screen = blessed.screen();
 
 const grid = new contrib.grid({ rows: 12, cols: 12, screen: screen });
 
-const queuedTable = grid.set(0, 0, 7, 4, contrib.table, { label: 'Queued', keys: true, fg: 'white', selectedFg: 'white', selectedBg: 'blue', interactive: true, border: { type: 'line', fg: 'cyan' }, columnSpacing: 10, columnWidth: [50, 20] }) as contrib.Widgets.TableElement;
+const TOP_ROW_COLUMN_WIDTHS = [40, 30];
 
-const inProgressTable = grid.set(0, 4, 7, 4, contrib.table, { label: 'In Progress', keys: true, fg: 'white', selectedFg: 'white', selectedBg: 'blue', interactive: true, border: { type: 'line', fg: 'yellow' }, columnSpacing: 10, columnWidth: [50, 20] }) as contrib.Widgets.TableElement;
+const queuedTable = grid.set(0, 0, 7, 4, contrib.table, { label: 'Queued', keys: true, fg: 'white', selectedFg: 'white', selectedBg: 'blue', interactive: true, border: { type: 'line', fg: 'cyan' }, columnSpacing: 5, columnWidth: TOP_ROW_COLUMN_WIDTHS }) as contrib.Widgets.TableElement;
 
-const succeededTable = grid.set(0, 8, 7, 4, contrib.table, { label: 'Succeeded', keys: true, fg: 'white', selectedFg: 'white', selectedBg: 'blue', interactive: true, border: { type: 'line', fg: 'green' }, columnSpacing: 10, columnWidth: [50, 20] }) as contrib.Widgets.TableElement;
+const inProgressTable = grid.set(0, 4, 7, 4, contrib.table, { label: 'In Progress', keys: true, fg: 'white', selectedFg: 'white', selectedBg: 'blue', interactive: true, border: { type: 'line', fg: 'yellow' }, columnSpacing: 5, columnWidth: TOP_ROW_COLUMN_WIDTHS }) as contrib.Widgets.TableElement;
 
-const failedTable = grid.set(7, 0, 3, 12, contrib.table, { label: 'Failed', keys: false, fg: 'white', border: { type: 'line', bg: 'red' }, columnSpacing: 10, columnWidth: [50, 20, 100] }) as contrib.Widgets.TableElement;
+const succeededTable = grid.set(0, 8, 7, 4, contrib.table, { label: 'Succeeded', keys: true, fg: 'white', selectedFg: 'white', selectedBg: 'blue', interactive: true, border: { type: 'line', fg: 'green' }, columnSpacing: 5, columnWidth: TOP_ROW_COLUMN_WIDTHS }) as contrib.Widgets.TableElement;
+
+const failedTable = grid.set(7, 0, 3, 12, contrib.table, { label: 'Failed', keys: false, fg: 'white', border: { type: 'line', bg: 'red' }, columnSpacing: 5, columnWidth: [50, 20, 100] }) as contrib.Widgets.TableElement;
 
 const eventLog = grid.set(10, 0, 2, 12, contrib.log, { fg: 'green', selectedFg: 'green', label: 'Event Log' }) as contrib.Widgets.LogElement;
 
