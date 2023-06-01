@@ -159,7 +159,7 @@ const logMigrationWarnings = async (migration: RepositoryMigration): Promise<voi
 
   for (const migrationLogWarning of migrationLogWarnings) {
     const presentedWarning = migrationLogWarning.split(' -- ')[1];
-    logger.warn(`⚠️  Migration of ${migration.repositoryName} (${migration.id}) returned a warning: ${presentedWarning}`);
+    logWarn(`Migration of ${migration.repositoryName} (${migration.id}) returned a warning: ${presentedWarning}`);
   }
 }
 
