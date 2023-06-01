@@ -125,9 +125,9 @@ const fetchMigrationLogUrl = async (migrationId: string): Promise<string | null>
 
 const MAXIMUM_ATTEMPTS_TO_GET_MIGRATION_LOG = 5;
 
-const getMigrationLogEntries = async (migrationId: string, currentAttempt = 1): Promise<string[]> => {
+const getMigrationLogEntries = async (migration: RepositoryMigration, currentAttempt = 1): Promise<string[]> => {
   try {
-    const migrationLogUrl = await fetchMigrationLogUrl(migrationId);
+    const migrationLogUrl = await fetchMigrationLogUrl(migration.id);
 
     if (migrationLogUrl) {
       const migrationLogResponse = await fetch(migrationLogUrl);
@@ -143,23 +143,23 @@ const getMigrationLogEntries = async (migrationId: string, currentAttempt = 1): 
     }
   } catch (e) {
     if (currentAttempt < MAXIMUM_ATTEMPTS_TO_GET_MIGRATION_LOG) {
-      logWarn(`Unable to download migration log for migration ${migrationId} after ${currentAttempt} attempts (${serializeError(e)}), trying again...`)
-      return getMigrationLogEntries(migrationId, currentAttempt + 1);
+      logWarn(`failed to download migration log after ${currentAttempt} attempts (${serializeError(e)}), trying again...`, migration);
+      return getMigrationLogEntries(migration, currentAttempt + 1);
     } else {
-     logError(`Failed to download migration log for migration ${migrationId} after ${MAXIMUM_ATTEMPTS_TO_GET_MIGRATION_LOG} attempt(s): ${serializeError(e)}`);
+     logError(`failed to download migration log after ${MAXIMUM_ATTEMPTS_TO_GET_MIGRATION_LOG} attempt(s): ${serializeError(e)}`, migration);
      return [];
     }
   }
 }
 
 const logMigrationWarnings = async (migration: RepositoryMigration): Promise<void> => {
-  const migrationLogEntries = await getMigrationLogEntries(migration.id);
+  const migrationLogEntries = await getMigrationLogEntries(migration);
   
   const migrationLogWarnings = migrationLogEntries.filter((entry) => entry.includes('WARN'));
 
   for (const migrationLogWarning of migrationLogWarnings) {
     const presentedWarning = migrationLogWarning.split(' -- ')[1];
-    logWarn(`Migration of ${migration.repositoryName} (${migration.id}) returned a warning: ${presentedWarning}`);
+    logWarn(`returned a warning: ${presentedWarning}`, migration);
   }
 }
 
@@ -192,12 +192,20 @@ screen.on('resize', function () {
   }
 });
 
-const logError = (message: string) => eventLog.log(`[ERROR] ${message}`);
-const logInfo = (message: string) => eventLog.log(`[INFO] ${message}`);
-const logWarn = (message: string) => eventLog.log(`[WARN] ${message}`);
+const logError = (message: string, migration?: RepositoryMigration) => eventLog.log(`${buildLogMessagePrefix('ERROR', migration)} ${message}`);
+const logInfo = (message: string, migration?: RepositoryMigration) => eventLog.log(`${buildLogMessagePrefix('INFO', migration)} ${message}`);
+const logWarn = (message: string, migration?: RepositoryMigration) => eventLog.log(`${buildLogMessagePrefix('WARN', migration)} ${message}`);
 
-const logFailedMigration = (migration: RepositoryMigration): void => { logError(`Migration of ${migration.repositoryName} (${migration.id}) failed: ${migration.failureReason}`) };
-const logSuccessfulMigration = (migration: RepositoryMigration): void => { logInfo(`Migration of ${migration.repositoryName} (${migration.id}) succeeded`) };
+const buildLogMessagePrefix = (level: string, migration: RepositoryMigration | undefined): string => {
+  if (migration) {
+    return `[${level}] Migration of ${migration.repositoryName} (${migration.id})`;
+  } else {
+    return `[${level}]`;
+  }
+}
+
+const logFailedMigration = (migration: RepositoryMigration): void => { logError(`failed: ${migration.failureReason}`, migration) };
+const logSuccessfulMigration = (migration: RepositoryMigration): void => { logInfo(`succeeded`, migration) };
 
 const repositoryMigrationToTableEntry = (repositoryMigration: RepositoryMigration, startedAt: Date | undefined): string[] => {
   const duration = startedAt ? `started ${timeAgo.format(startedAt)}` : `queued ${timeAgo.format(new Date(repositoryMigration.createdAt))}`;
@@ -308,7 +316,7 @@ const getNoMigrationsFoundMessage = (since: Date | undefined): string => {
               logSuccessfulMigration(latestVersionOfAlreadyKnownMigration);
               logMigrationWarnings(latestVersionOfAlreadyKnownMigration);
             } else {
-              logInfo(`Migration of ${alreadyKnownMigration.repositoryName} (${latestVersionOfAlreadyKnownMigration.id}) changed state: ${presentState(alreadyKnownMigration.state)} ➡️  ${presentState(latestVersionOfAlreadyKnownMigration.state)}`);
+              logInfo(`changed state: ${presentState(alreadyKnownMigration.state)} ➡️  ${presentState(latestVersionOfAlreadyKnownMigration.state)}`, latestVersionOfAlreadyKnownMigration);
             }
           }
         }
@@ -329,9 +337,9 @@ const getNoMigrationsFoundMessage = (since: Date | undefined): string => {
           logSuccessfulMigration(newMigration);
           logMigrationWarnings(newMigration);
         } else if (newMigration.state === 'QUEUED') {
-          logInfo(`Migration of ${newMigration.repositoryName} (${newMigration.id}) was queued`);
+          logInfo(`was queued`, newMigration);
         } else {
-          logInfo(`Migration of ${newMigration.repositoryName} (${newMigration.id}) was queued and is currently ${presentState(newMigration.state)}`);
+          logInfo(`was queued and is currently ${presentState(newMigration.state)}`, newMigration);
         }
       }
     }
