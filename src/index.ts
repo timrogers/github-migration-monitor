@@ -169,7 +169,7 @@ const grid = new contrib.grid({ rows: 12, cols: 12, screen: screen });
 
 const TOP_ROW_COLUMN_WIDTHS = [40, 30];
 
-const queuedTable = grid.set(0, 0, 7, 4, contrib.table, { label: 'Queued', keys: true, fg: 'white', selectedFg: 'white', selectedBg: 'blue', interactive: true, border: { type: 'line', fg: 'cyan' }, columnSpacing: 5, columnWidth: TOP_ROW_COLUMN_WIDTHS }) as contrib.Widgets.TableElement;
+const queuedTable = grid.set(0, 0, 7, 4, contrib.table, { label: 'Queued', keys: true, fg: 'white', selectedFg: 'white', selectedBg: null, interactive: true, border: { type: 'line', fg: 'cyan' }, columnSpacing: 5, columnWidth: TOP_ROW_COLUMN_WIDTHS }) as contrib.Widgets.TableElement;
 
 const inProgressTable = grid.set(0, 4, 7, 4, contrib.table, { label: 'In Progress', keys: true, fg: 'white', selectedFg: 'white', selectedBg: 'blue', interactive: true, border: { type: 'line', fg: 'yellow' }, columnSpacing: 5, columnWidth: TOP_ROW_COLUMN_WIDTHS }) as contrib.Widgets.TableElement;
 
@@ -229,7 +229,7 @@ const updateScreen = (repositoryMigrations: RepositoryMigration[], repositoryMig
   const queuedMigrationsForTable = queuedMigrations.concat(notStartedMigrations).concat(pendingValidationMigrations);
   const inProgressMigrationsForTable = migrationsByState[MigrationState.IN_PROGRESS] || [];
   const succeededMigrationsForTable = migrationsByState[MigrationState.SUCCEEDED] || [];
-  const failedMigrationsForTable = failedMigrations.concat(failedValidationMigrations);
+  const failedMigrationsForTable = failedMigrations.concat(failedValidationMigrations).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   queuedTable.setData({
     headers: TABLE_COLUMNS,
