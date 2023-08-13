@@ -13,13 +13,13 @@ import en from 'javascript-time-ago/locale/en'
 TimeAgo.addDefaultLocale(en);
 const timeAgo = new TimeAgo('en');
 
-import logger from './logger';
-import { MigrationState, Opts, RepositoryMigration } from './types';
-import { getRequestIdFromError, parseSince, presentState, serializeError } from './utils';
+import logger from './logger.js';
+import { MigrationState, Opts, RepositoryMigration } from './types.js';
+import { getRequestIdFromError, parseSince, presentState, serializeError } from './utils.js';
 
 program
-  .name(name)
-  .description(description)
+  .name('github-migration-monitor')
+  .description('Monitors GitHub Enterprise Importer (GEI) migrations for an organization')
   .option('--github-token <token>', 'A GitHub personal access token (PAT) with `read:org` scope. Required to be set using this option or the `GITHUB_TOKEN` environment variable.', process.env.GITHUB_TOKEN)
   .requiredOption('--organization <organization>', 'The GitHub organization to monitor')
   .option('--interval-in-seconds <interval-in-seconds>', 'Interval in seconds between refreshes', (value) => parseInt(value), 10)

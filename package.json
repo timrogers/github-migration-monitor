@@ -1,16 +1,17 @@
 {
   "name": "github-migration-monitor",
+  "type": "module",
   "description": "Monitors GitHub Enterprise Importer (GEI) migrations for an organization",
   "version": "0.0.0-development",
   "scripts": {
-    "dev": "npx ts-node src/index.ts",
+    "dev": "npx ts-node --esm src/index.ts",
     "build": "npx tsc",
     "prepublish": "npm run build",
     "lint": "eslint . --ext .ts",
     "lint-and-fix": "eslint . --ext .ts --fix",
     "semantic-release": "semantic-release"
   },
-  "module": "./dist/src/index.js",
+  "module": "./dist/index.js",
   "homepage": "https://github.com/timrogers/github-migration-monitor",
   "files": [
     "dist"
