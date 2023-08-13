@@ -283,6 +283,7 @@ const getNoMigrationsFoundMessage = (since: Date | undefined): string => {
     const startedUpdatingAt = new Date();
 
     try {
+      logInfo('Loading migrations...');
       latestRepositoryMigrations = await getRepositoryMigrations(organizationId, since);
     } catch (e) {
       const runtimeInMilliseconds = new Date().getTime() - startedUpdatingAt.getTime();
