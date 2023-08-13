@@ -16,7 +16,7 @@ const timeAgo = new TimeAgo('en');
 import { description, name, version } from './../package.json';
 import logger from './logger';
 import { MigrationState, Opts, RepositoryMigration } from './types';
-import { parseSince, presentState, serializeError } from './utils';
+import { getRequestIdFromError, parseSince, presentState, serializeError } from './utils';
 
 program
   .name(name)
@@ -285,7 +285,10 @@ const getNoMigrationsFoundMessage = (since: Date | undefined): string => {
     try {
       latestRepositoryMigrations = await getRepositoryMigrations(organizationId, since);
     } catch (e) {
-      logError(`Failed to load migrations: ${serializeError(e)}. Trying again in ${opts.intervalInSeconds} second(s)`);
+      const runtimeInMilliseconds = new Date().getTime() - startedUpdatingAt.getTime();
+      const requestId = getRequestIdFromError(e);
+      logError(`Failed to load migrations after ${runtimeInMilliseconds}ms (${requestId ?? '-'}): "${serializeError(e)}". Trying again in ${opts.intervalInSeconds} second(s)`);
+      
       // If we failed to fetch the migrations and it's currently the first run, we still pretend it's the first run next time
       setTimeout(() => updateRepositoryMigration(isFirstRun), intervalInMilliseconds);
       return;

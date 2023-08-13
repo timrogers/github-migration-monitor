@@ -10,6 +10,12 @@ export const serializeError = (e: unknown): string => {
   return JSON.stringify(e);
 }
 
+export const getRequestIdFromError = (e: unknown): string | undefined => {
+  if (e instanceof GraphqlResponseError) return e.headers["x-github-request-id"];
+  if (e instanceof RequestError) return e.response?.headers["x-github-request-id"];
+  return undefined;
+};
+
 const isValidDate = (date: unknown): boolean => date instanceof Date && !isNaN(date.getTime());
 
 export const parseSince = (since: string): Date => {
