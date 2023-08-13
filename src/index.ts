@@ -208,8 +208,12 @@ const logFailedMigration = (migration: RepositoryMigration): void => { logError(
 const logSuccessfulMigration = (migration: RepositoryMigration): void => { logInfo(`succeeded`, migration) };
 
 const repositoryMigrationToTableEntry = (repositoryMigration: RepositoryMigration, startedAt: Date | undefined): string[] => {
-  const duration = startedAt ? `started ${timeAgo.format(startedAt)}` : `queued ${timeAgo.format(new Date(repositoryMigration.createdAt))}`;
-  return [repositoryMigration.repositoryName, duration];
+  if (repositoryMigration.state === 'IN_PROGRESS') {
+    const duration = startedAt ? `started ${timeAgo.format(startedAt)}` : `queued ${timeAgo.format(new Date(repositoryMigration.createdAt))}`;
+    return [repositoryMigration.repositoryName, duration];
+  } else {
+    return [repositoryMigration.repositoryName, `queued ${timeAgo.format(new Date(repositoryMigration.createdAt))}`];
+  }
 };
 
 const failedRepositoryMigrationToTableEntry = (repositoryMigration: RepositoryMigration, startedAt: Date | undefined): string[] => repositoryMigrationToTableEntry(repositoryMigration, startedAt).concat(repositoryMigration.failureReason || '');
