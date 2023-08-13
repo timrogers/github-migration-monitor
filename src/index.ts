@@ -280,6 +280,8 @@ const getNoMigrationsFoundMessage = (since: Date | undefined): string => {
   async function updateRepositoryMigration(isFirstRun: boolean): Promise<void> {
     let latestRepositoryMigrations: RepositoryMigration[] = [];
 
+    const startedUpdatingAt = new Date();
+
     try {
       latestRepositoryMigrations = await getRepositoryMigrations(organizationId, since);
     } catch (e) {
@@ -288,6 +290,8 @@ const getNoMigrationsFoundMessage = (since: Date | undefined): string => {
       setTimeout(() => updateRepositoryMigration(isFirstRun), intervalInMilliseconds);
       return;
     }
+
+    logInfo(`Loaded ${latestRepositoryMigrations.length} migration(s) in ${new Date().getTime() - startedUpdatingAt.getTime()}ms`);
 
     const countsByState = Object.fromEntries(
       Object
