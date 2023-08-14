@@ -21,7 +21,7 @@
   "license": "MIT",
   "dependencies": {
     "@octokit/graphql": "^7.0.0",
-    "@octokit/plugin-paginate-graphql": "^2.0.1",
+    "@octokit/plugin-paginate-graphql": "^4.0.0",
     "blessed": "^0.1.81",
     "blessed-contrib": "^4.11.0",
     "commander": "^11.0.0",
