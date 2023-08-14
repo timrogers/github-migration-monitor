@@ -16,7 +16,7 @@
   "files": [
     "dist"
   ],
-  "bin": "./dist/src/index.js",
+  "bin": "./dist/index.js",
   "author": "Tim Rogers <timrogers@github.com>",
   "license": "MIT",
   "dependencies": {
