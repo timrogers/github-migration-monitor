@@ -65,7 +65,7 @@ const getRepositoryMigrations = async (organizationId: string, since: Date | und
       query paginateRepositoryMigrations($cursor: String) {
         node(id: ${JSON.stringify(organizationId)}) {
           ... on Organization {
-            repositoryMigrations(after: $cursor, first: 10) {
+            repositoryMigrations(after: $cursor, first: 100) {
               nodes {
                 id
                 createdAt
