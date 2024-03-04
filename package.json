@@ -20,7 +20,7 @@
   "author": "Tim Rogers <timrogers@github.com>",
   "license": "MIT",
   "dependencies": {
-    "@octokit/graphql": "^7.0.0",
+    "@octokit/graphql": "^8.0.1",
     "@octokit/plugin-paginate-graphql": "^4.0.0",
     "blessed": "^0.1.81",
     "blessed-contrib": "^4.11.0",
