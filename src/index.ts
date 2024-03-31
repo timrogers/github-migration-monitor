@@ -2,7 +2,7 @@
 
 import { program } from 'commander';
 import { Octokit } from "@octokit/core";
-import { paginateGraphql } from "@octokit/plugin-paginate-graphql";
+import { paginateGraphQL } from "@octokit/plugin-paginate-graphql";
 import groupBy from 'lodash.groupby';
 import fetch from 'cross-fetch';
 import blessed from 'blessed';
@@ -53,7 +53,7 @@ if (opts.since) {
 
 const intervalInMilliseconds = intervalInSeconds * 1_000;
 
-const OctokitWithPaginateGraphql = Octokit.plugin(paginateGraphql);
+const OctokitWithPaginateGraphql = Octokit.plugin(paginateGraphQL);
 
 const octokit = new OctokitWithPaginateGraphql({ auth: githubToken });
 
