@@ -28,7 +28,7 @@
     "cross-fetch": "^4.0.0",
     "javascript-time-ago": "^2.5.9",
     "lodash.groupby": "^4.6.0",
-    "octokit": "^3.1.0",
+    "octokit": "^4.0.2",
     "winston": "^3.8.2"
   },
   "devDependencies": {
