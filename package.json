@@ -7,8 +7,8 @@
     "dev": "npx ts-node --esm src/index.ts",
     "build": "npx tsc",
     "prepublish": "npm run build",
-    "lint": "eslint . --ext .ts",
-    "lint-and-fix": "eslint . --ext .ts --fix",
+    "lint": "eslint .",
+    "lint-and-fix": "eslint . --fix",
     "semantic-release": "semantic-release"
   },
   "module": "./dist/index.js",
